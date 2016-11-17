@@ -158,8 +158,11 @@ DB.prototype._del = function (key, opts, cb) {
   var self = this
   self.kv.get(key, function (err, values) {
     if (err) return cb(err)
-    var fields = {}
 
+    // emulate old behaviour, where presence of a value supersedes deletions
+    values = transformToOldKvBehaviour(values)
+
+    var fields = {}
     var links = opts.keys || Object.keys(values)
     links.forEach(function (ln) {
       var v = values[ln] || {}
@@ -221,11 +224,14 @@ DB.prototype.get = function (key, opts, cb) {
   }
   if (!opts) opts = {}
 
-  this.kv.get(key, opts, function (err, doc) {
+  // TODO: handle changesets
+  this.kv.get(key, opts, function (err, values) {
     if (err) return cb(err)
-    else if (doc.type === 'changeset') {
-      //...
-    } else cb(null, doc)
+
+    // emulate old behaviour, where presence of a value supersedes deletions
+    values = transformToOldKvBehaviour(values)
+
+    cb(null, values)
   })
 }
 
@@ -413,5 +419,27 @@ function isPoint (v) {
 
 function isWay (v) {
   return Array.isArray(v.refs)
+}
+
+// Helper to emulate old hyperkv behaviour, where the presence of a value
+// supersedes any deletions. Only return no values if there are only deletions
+// present. Consumes a hash and returns a new hash.
+function transformToOldKvBehaviour (values) {
+  var keys = Object.keys(values)
+  var containsValues = keys.reduce(function (accum, key) {
+    return accum || !values[key].deleted
+  }, false)
+
+  if (containsValues) {
+    // remove all deletes
+    keys.forEach(function (key) {
+      if (values[key].deleted) delete values[key]
+      else values[key] = values[key].value
+    })
+    return values
+  } else {
+    // return empty values
+    return {}
+  }
 }
 
