@@ -39,7 +39,7 @@ function DB (opts) {
     map: function (row, next) {
       if (!row.value) return null
       var v = row.value.v, d = row.value.d
-      if (v && v.lat !== undefined && v.lon !== undefined) {
+      if (isPoint(v)) {
         next(null, { type: 'put', point: ptf(v) })
       } else if (d && Array.isArray(row.value.points)) {
         next(null, { type: 'del', points: row.value.points.map(ptf) })
@@ -158,16 +158,16 @@ DB.prototype._del = function (key, opts, cb) {
   var self = this
   self.kv.get(key, function (err, values) {
     if (err) return cb(err)
-    var pending = 1
     var fields = {}
+
     var links = opts.keys || Object.keys(values)
     links.forEach(function (ln) {
       var v = values[ln] || {}
-      if (v.lat !== undefined && v.lon !== undefined) {
+      if (isPoint(v)) {
         if (!fields.points) fields.points = []
         fields.points.push({ lat: v.lat, lon: v.lon })
       }
-      if (Array.isArray(v.refs)) {
+      if (isWay(v)) {
         if (!fields.refs) fields.refs = []
         fields.refs.push.apply(fields.refs, v.refs)
       }
@@ -400,3 +400,12 @@ function collectObj (stream, cb) {
   }
   function end () { cb(null, rows) }
 }
+
+function isPoint (v) {
+  return v && v.lat !== undefined && v.lon !== undefined
+}
+
+function isWay (v) {
+  return Array.isArray(v.refs)
+}
+
